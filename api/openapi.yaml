@@ -1,0 +1,2687 @@
+openapi: 3.0.2
+info:
+  description: |
+    ## Introduction
+    The Puppet Forge API (hereafter referred to as the Forge API) provides quick access to all the
+    data on the Puppet Forge via a RESTful interface. Using the Forge API, you can write scripts and
+    tools that interact with the Puppet Forge website.
+
+    The Forge API's current version is `v3`. It is considered regression-stable, meaning that the returned
+    data is guaranteed to include the fields described in the schemas on this page; however, additional data
+    might be added in the future and clients must ignore any properties they do not recognize.
+
+    ## OpenAPI Specification
+    The Puppet Forge v3 API is described by an
+    [OpenAPI 3.0](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.0.md) formatted
+    specification file. The most up-to-date version of this specification file can be accessed at
+    [https://forgeapi.puppet.com/v3/openapi.json](/v3/openapi.json).
+
+    ## Features
+    * The API is accessed over HTTPS via the `forgeapi.puppet.com` domain. All data is returned in JSON
+      format.
+    * Blank fields are included as `null`.
+    * Nested resources may use an abbreviated representation. A link to the full representation for the
+      resource is always included.
+    * All timestamps in JSON responses are returned in ISO 8601 format: `YYYY-MM-DD HH:MM:SS ±HHMM`.
+    * The HTTP response headers include caching hints for conditional requests.
+
+    ## Concepts and Terminology
+    * **Module**: Modules are self-contained bundles of code and data with a specific directory structure. Modules are identified by a combination of the author's username and the module's name, separated by a hyphen. For example: `puppetlabs-apache`
+    * **Release**: A single, specific version of a module is called a Release. Releases are identified by a combination of the module identifier (see above) and the Release version, separated by a hyphen. For example: `puppetlabs-apache-4.0.0`
+
+    ## Errors
+    The Puppet Forge API follows [RFC 2616](https://tools.ietf.org/html/rfc2616) and
+    [RFC 6585](https://tools.ietf.org/html/rfc6585).
+
+    Error responses are served with a `4xx` or `5xx` status code, and are sent as a JSON document with a content type
+    of `application/json`. The error document contains the following top-level keys and values:
+
+      * `message`: a string value that summarizes the problem
+      * `errors`: a list (array) of strings containing additional details describing the underlying cause(s) of the
+        failure
+
+    An example error response is shown below:
+
+    ```json
+    {
+      "message": "400 Bad Request",
+      "errors": [
+        "Cannot parse request body as JSON"
+      ]
+    }
+    ```
+
+    ## User-Agent Required
+    All API requests must include a valid `User-Agent` header. Requests with no `User-Agent` header will
+    be rejected. The `User-Agent` header helps identify your application or library, so we can communicate
+    with you if necessary. If your use of the API is informal or personal, we recommend using your username
+    as the value for the `User-Agent` header.
+
+    User-Agent headers are a list of one or more product descriptions, generally taking this form:
+
+    ```
+    <name-without-spaces>/<version> (comments)
+    ```
+
+    For example, the following are all useful User-Agent values:
+
+    ```
+    MyApplication/0.0.0 Her/0.6.8 Faraday/0.8.8 Ruby/1.9.3-p194 (i386-linux)
+    My-Library-Name/1.2.4
+    myusername
+    ```
+  title: Puppet Forge v3 API
+  version: "18"
+servers:
+- url: https://forgeapi.puppet.com
+paths:
+  /v3/users:
+    get:
+      description: |
+        Provides information about Puppet Forge user accounts. By default, results are returned in alphabetical
+        order by username and paginated with 20 users per page. It's also possible to sort by number of published
+        releases, total download counts for all the user's modules, or by the date of the user's latest release.
+        All parameters are optional.
+      operationId: getUsers
+      parameters:
+      - description: The numbers of items to return per page
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          type: integer
+        style: form
+      - description: Desired order in which to return results
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          enum:
+          - username
+          - releases
+          - downloads
+          - latest_release
+          type: string
+        style: form
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+      summary: List users
+      tags:
+      - User Operations
+  /v3/users/{user_slug}:
+    get:
+      description: |
+        Returns data for a single User resource identified by the user's `slug` value.
+      operationId: getUser
+      parameters:
+      - description: Unique textual identifier (slug) of the User resource to retrieve
+        example: puppetlabs
+        explode: false
+        in: path
+        name: user_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+$
+          type: string
+        style: simple
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: Fetch user
+      tags:
+      - User Operations
+  /v3/modules/{module_slug}:
+    delete:
+      description: |
+        Perform a soft delete of a module, identified by the module's `slug` value. The module's releases will still be available for direct download via their associated `/v3/files` endpoints, but the module will no longer be readily available through the Forge web interface.
+      operationId: deleteModule
+      parameters:
+      - description: Unique textual identifier (slug) of the Module resource to retrieve
+        example: puppetlabs-apache
+        explode: false
+        in: path
+        name: module_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-zA-Z][a-zA-Z0-9_]*$
+          type: string
+        style: simple
+      - description: Reason for deletion
+        example: Broken code
+        explode: true
+        in: query
+        name: reason
+        required: true
+        schema:
+          type: string
+        style: form
+      responses:
+        "204":
+          description: No Content (the module was deleted successfully)
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_403'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      security:
+      - ApiKeyAuth: []
+      summary: Delete module
+      tags:
+      - Module Operations
+    get:
+      description: |
+        Returns data for a single Module resource identified by the module's `slug` value.
+      operationId: getModule
+      parameters:
+      - description: Unique textual identifier (slug) of the Module resource to retrieve
+        example: puppetlabs-apache
+        explode: false
+        in: path
+        name: module_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*$
+          type: string
+        style: simple
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: Fetch module
+      tags:
+      - Module Operations
+    patch:
+      description: |
+        Mark a module, identified by the module's `slug` value, as "deprecated". Deprecated modules are still
+        visible on the Forge website, but users are directed to strongly consider alternate modules.
+        **Because the deprecate action is intended to be one-way, there is no operation for undeprecating a module.**
+      operationId: deprecateModule
+      parameters:
+      - description: Unique textual identifier (slug) of the module to deprecate
+        example: puppetlabs-apache
+        explode: false
+        in: path
+        name: module_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-zA-Z][a-zA-Z0-9_]*$
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeprecationRequest'
+        description: Action and params for patch operation.
+        required: true
+      responses:
+        "204":
+          description: No Content (the module was successfully marked as deprecated)
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_403'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      security:
+      - ApiKeyAuth: []
+      summary: Deprecate module
+      tags:
+      - Module Operations
+  /v3/releases:
+    get:
+      description: |
+        Returns a list of module releases meeting the specified search criteria and filters. Results are paginated.
+        All of the parameters are optional.
+      operationId: getReleases
+      parameters:
+      - description: The numbers of items to return per page
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          type: integer
+        style: form
+      - description: |
+          Desired order in which to return results
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          enum:
+          - downloads
+          - release_date
+          - module
+          type: string
+        style: form
+      - description: Constrain results to releases for a given module
+        example: puppetlabs-apache
+        explode: true
+        in: query
+        name: module
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Constrain results to releases for any modules owned by the given
+          user
+        example: puppetlabs
+        explode: true
+        in: query
+        name: owner
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |
+          Constrain results to module releases created with
+          [Puppet Development Kit](https://puppet.com/docs/pdk/latest/pdk.html)
+        explode: true
+        in: query
+        name: with_pdk
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: |
+          Constrain results to module releases that explicitly support the given operating system, see
+          [metadata.json documentation](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-operating-system-compatibility) for more information about possible values
+        example: redhat
+        explode: true
+        in: query
+        name: operatingsystem
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |
+          Constrain results to module releases that explicitly list a Puppet Enterprise version requirement in the given
+          [semantic versioning range](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-versions)
+        example: 5.x
+        explode: true
+        in: query
+        name: pe_requirement
+        required: false
+        schema:
+          format: semantic version range
+          type: string
+        style: form
+      - description: |
+          Constrain results to module releases that explicitly list a Puppet version requirement in the given
+          [semantic versioning range](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-versions)
+        example: 6.x
+        explode: true
+        in: query
+        name: puppet_requirement
+        required: false
+        schema:
+          format: semantic version range
+          type: string
+        style: form
+      - description: Constrain results to releases for modules in any of the given
+          module groups
+        example: base+pe_only
+        explode: false
+        in: query
+        name: module_groups
+        required: false
+        schema:
+          items:
+            enum:
+            - base
+            - pe_only
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: Include releases marked as "deleted" in results
+        explode: true
+        in: query
+        name: show_deleted
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Exclude releases of deprecated modules from the results. Treats
+          any value as true.
+        explode: true
+        in: query
+        name: hide_deprecated
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      - deprecated: true
+        description: |
+          Constrain results to releases for [Supported modules](https://forge.puppet.com/supported)
+        explode: true
+        in: query
+        name: supported
+        required: false
+        schema:
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+      summary: List module releases
+      tags:
+      - Release Operations
+    post:
+      description: |
+        Publish a new module or new release of an existing module
+      operationId: addRelease
+      requestBody:
+        $ref: '#/components/requestBodies/inline_object'
+        content:
+          application/json:
+            schema:
+              properties:
+                file:
+                  example: H4sIABYkiFwAA+09CT...
+                  format: base64
+                  type: string
+              type: object
+          multipart/form-data:
+            schema:
+              properties:
+                file:
+                  format: binary
+                  type: string
+              type: object
+        description: Release tarball to publish, either base64 encoded or as a multipart/form-data
+          upload.
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseMinimal'
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_403'
+          description: Forbidden
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_409'
+          description: Conflict
+      security:
+      - ApiKeyAuth: []
+      summary: Create module release
+      tags:
+      - Release Operations
+  /v3/releases/{release_slug}:
+    delete:
+      description: |
+        Perform a soft delete of a module release, identified by the module release's `slug` value. The release will still be available for direct download from it's `/v3/files` endpoint, but will not be readily available in the Forge web interface.
+      operationId: deleteRelease
+      parameters:
+      - description: Unique textual identifier (slug) of the module release to delete
+        example: puppetlabs-apache-4.0.0
+        explode: false
+        in: path
+        name: release_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        style: simple
+      - description: Reason for deletion
+        example: bugs
+        explode: true
+        in: query
+        name: reason
+        required: true
+        schema:
+          type: string
+        style: form
+      responses:
+        "204":
+          description: No Content (the release was deleted successfully)
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_403'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      security:
+      - ApiKeyAuth: []
+      summary: Delete module release
+      tags:
+      - Release Operations
+    get:
+      description: |
+        Returns data for a single module Release resource identified by the module release's `slug` value.
+      operationId: getRelease
+      parameters:
+      - description: Unique textual identifier (slug) of the module Release resource
+          to retrieve
+        example: puppetlabs-apache-4.0.0
+        explode: false
+        in: path
+        name: release_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        style: simple
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: Fetch module release
+      tags:
+      - Release Operations
+  /v3/releases/{release_slug}/plans:
+    get:
+      description: |
+        Returns a paginated list of all plans from the module release identified by the `release_slug` name. The `release_slug` is composed of the hyphenated module author, name, and version number (example: `puppetlabs-lvm-1.4.0`).
+      operationId: getReleasePlans
+      parameters:
+      - description: Unique textual identifier (slug) of the module Release resource
+          to retrieve
+        example: puppetlabs-apache-4.0.0
+        explode: false
+        in: path
+        name: release_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: List module release plans
+      tags:
+      - Release Operations
+  /v3/releases/{release_slug}/plans/{plan_name}:
+    get:
+      description: |
+        Returns a summary of the given plan from the module release identified by the `release_slug` name. The `release_slug` is composed of the hyphenated module author, name, and version number (example: `puppetlabs-lvm-1.4.0`). The `plan_name` should be the full name including the module name (example: `lvm::expand`).
+      operationId: getReleasePlan
+      parameters:
+      - description: Unique textual identifier (slug) of the module Release resource
+          to retrieve
+        example: puppetlabs-lvm-1.4.0
+        explode: false
+        in: path
+        name: release_slug
+        required: true
+        schema:
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        style: simple
+      - description: Full name of desired plan, including module name and namespaces
+        example: lvm::expand
+        explode: false
+        in: path
+        name: plan_name
+        required: true
+        schema:
+          pattern: ^[a-z][a-z0-9_]*(?:::[a-z][a-z0-9_]*)*$
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleasePlan'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: Fetch module release plan
+      tags:
+      - Release Operations
+  /v3/files/{filename}:
+    get:
+      description: |
+        Download a module release tarball
+      operationId: getFile
+      parameters:
+      - description: Module release filename to be downloaded (e.g. "puppetlabs-apache-2.0.0.tar.gz")
+        explode: false
+        in: path
+        name: filename
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/octet-stream:
+              schema:
+                format: binary
+                type: string
+          description: OK
+          headers:
+            Content-Disposition:
+              description: Indicates response should be treated as an attachment and
+                suggests a filename which matches the requested tarball name
+              explode: false
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: Download module release
+      tags:
+      - Release Operations
+  /v3/modules:
+    get:
+      description: |
+        Returns a list of modules meeting the specified search criteria and filters. Results are paginated. All
+        of the parameters are optional. To publish or delete a Release resource, see [Release operations](#tag/Release-Operations).
+      operationId: getModules
+      parameters:
+      - description: The numbers of items to return per page
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 20
+          maximum: 100
+          minimum: 1
+          type: integer
+        style: form
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          type: integer
+        style: form
+      - description: |
+          Desired order in which to return results, note that `rank` is only available (and becomes the default) when
+          a value has been provided for the `query` param
+        explode: true
+        in: query
+        name: sort_by
+        required: false
+        schema:
+          enum:
+          - rank
+          - downloads
+          - latest_release
+          type: string
+        style: form
+      - description: Freeform textual search query
+        example: apache
+        explode: true
+        in: query
+        name: query
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Constrain results to modules that have the given tag
+        example: httpd
+        explode: true
+        in: query
+        name: tag
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Constrain results to modules owned by the given user
+        example: puppetlabs
+        explode: true
+        in: query
+        name: owner
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |
+          Constrain results to modules that include
+          [Bolt tasks](https://puppet.com/docs/bolt/latest/writing_tasks_and_plans.html)
+        explode: true
+        in: query
+        name: with_tasks
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: |
+          Constrain results to modules that include
+          [Bolt plans](https://puppet.com/docs/bolt/latest/writing_tasks_and_plans.html)
+        explode: true
+        in: query
+        name: with_plans
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: |
+          Constrain results to modules created with
+          [Puppet Development Kit](https://puppet.com/docs/pdk/latest/pdk.html)
+        explode: true
+        in: query
+        name: with_pdk
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Constrain results to modules with at least one of the given endorsements
+        example: supported+approved
+        explode: false
+        in: query
+        name: endorsements
+        required: false
+        schema:
+          items:
+            enum:
+            - supported
+            - approved
+            - partner
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: |
+          Constrain results to modules that explicitly support the given operating system, see
+          [metadata.json documentation](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-operating-system-compatibility) for more information about possible values, see also the `only_latest` param
+        example: redhat
+        explode: true
+        in: query
+        name: operatingsystem
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: |
+          Constrain results to modules that explicitly list a Puppet Enterprise version requirement in the given
+          [semantic versioning range](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-versions),
+          see also the `only_latest` param
+        example: 5.x
+        explode: true
+        in: query
+        name: pe_requirement
+        required: false
+        schema:
+          format: semantic version range
+          type: string
+        style: form
+      - description: |
+          Constrain results to modules that explicitly list a Puppet version requirement in the given
+          [semantic versioning range](https://puppet.com/docs/puppet/latest/modules_metadata.html#specifying-versions),
+          see also the `only_latest` param
+        example: 6.x
+        explode: true
+        in: query
+        name: puppet_requirement
+        required: false
+        schema:
+          format: semantic version range
+          type: string
+        style: form
+      - description: |
+          Constrain results to modules with at least one release that has a minimum validation_score greater
+          than or equal to the provided integer, see also the `only_latest` param
+        example: 90
+        explode: true
+        in: query
+        name: with_minimum_score
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Constrain results to modules in any of the given module groups
+        example:
+        - base
+        - pe_only
+        explode: false
+        in: query
+        name: module_groups
+        required: false
+        schema:
+          items:
+            enum:
+            - base
+            - pe_only
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: Include modules where all released versions have been marked
+          as deleted
+        explode: true
+        in: query
+        name: show_deleted
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: Exclude deprecated modules from the results. Treats any value
+          as true.
+        explode: true
+        in: query
+        name: hide_deprecated
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: |
+          When checking modules against the `operatingsystem`, `pe_requirement`, or `puppet_requirement` filters,
+          only consider the compatibility information for the latest release of the module, where "latest" means:
+          the module release with the highest precedence, non-pre-release version (see also:
+          [semver.org](https://semver.org/#spec-item-11))
+        explode: true
+        in: query
+        name: only_latest
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      - description: |
+          A comma-separated list of specific modules to retrieve. Module names should be
+          specified in the hyphenated "slug" format (`author_name-module_name`). If at least
+          one of the requested modules is not found, this endpoint returns a 404 error, with
+          the slugs of the missing module(s) in the body. This parameter is incompatible
+          with the `endorsements`, `module_groups`, `only_latest`, `operatingsystem`, `owner`,
+          `pe_requirement`, `puppet_requirement`, `query`, `show_deleted`, `hide_deprecated`,
+          `tag`, `with_minimum_score`, `with_pdk`, `with_tasks`, and `with_plans` parameters.
+          These will produce 400 errors when included. Note that any matching soft-deleted
+          modules (modules with no associated releases) will always be included in the results
+          alongside modules with releases.
+        example:
+        - puppetlabs-stdlib
+        - puppet-logrotate
+        explode: false
+        in: query
+        name: slugs
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: form
+      - description: Render markdown files (README, REFERENCE, etc.) to HTML before
+          returning results
+        explode: true
+        in: query
+        name: with_html
+        required: false
+        schema:
+          type: boolean
+        style: form
+      - description: List of top level keys to include in response object, only applies
+          to fields marked 'optional'
+        example:
+        - docs
+        explode: false
+        in: query
+        name: include_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - description: List of top level keys to exclude from response object
+        example:
+        - readme
+        - changelog
+        - license
+        - reference
+        explode: false
+        in: query
+        name: exclude_fields
+        required: false
+        schema:
+          items:
+            type: string
+          type: array
+        style: spaceDelimited
+      - explode: false
+        in: header
+        name: If-Modified-Since
+        required: false
+        schema:
+          description: |
+            Only processes the request if the resource or list of resources has changed since the given time,
+            otherwise returns a `304 Not Modified` response
+          example: Mon, 19 Feb 2019 10:15:08 GMT
+          format: rfc2616 httpdate
+          type: string
+        style: simple
+      - deprecated: true
+        description: |
+          Constrain results to [Supported modules](https://forge.puppet.com/supported), see "endorsements"
+          param instead
+        explode: true
+        in: query
+        name: supported
+        required: false
+        schema:
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+          description: OK
+        "304":
+          description: Not Modified
+          headers:
+            Last-Modified:
+              explode: false
+              schema:
+                description: Date and time that this response last changed
+                example: Mon, 19 Feb 2019 10:15:08 GMT
+                format: rfc2616 httpdate
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_400'
+          description: Bad Request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_404'
+          description: Not Found
+      summary: List modules
+      tags:
+      - Module Operations
+components:
+  parameters:
+    ifModifiedSince:
+      explode: false
+      in: header
+      name: If-Modified-Since
+      required: false
+      schema:
+        description: |
+          Only processes the request if the resource or list of resources has changed since the given time,
+          otherwise returns a `304 Not Modified` response
+        example: Mon, 19 Feb 2019 10:15:08 GMT
+        format: rfc2616 httpdate
+        type: string
+      style: simple
+    limitQuery:
+      description: The numbers of items to return per page
+      explode: true
+      in: query
+      name: limit
+      required: false
+      schema:
+        default: 20
+        maximum: 100
+        minimum: 1
+        type: integer
+      style: form
+    offsetQuery:
+      description: The number of items to skip before starting to collect the result
+        set
+      explode: true
+      in: query
+      name: offset
+      required: false
+      schema:
+        default: 0
+        minimum: 0
+        type: integer
+      style: form
+    withHTML:
+      description: Render markdown files (README, REFERENCE, etc.) to HTML before
+        returning results
+      explode: true
+      in: query
+      name: with_html
+      required: false
+      schema:
+        type: boolean
+      style: form
+    includeFields:
+      description: List of top level keys to include in response object, only applies
+        to fields marked 'optional'
+      example:
+      - docs
+      explode: false
+      in: query
+      name: include_fields
+      required: false
+      schema:
+        items:
+          type: string
+        type: array
+      style: spaceDelimited
+    excludeFields:
+      description: List of top level keys to exclude from response object
+      example:
+      - readme
+      - changelog
+      - license
+      - reference
+      explode: false
+      in: query
+      name: exclude_fields
+      required: false
+      schema:
+        items:
+          type: string
+        type: array
+      style: spaceDelimited
+  requestBodies:
+    inline_object:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_object'
+        multipart/form-data:
+          schema:
+            $ref: '#/components/schemas/inline_object'
+      required: true
+  responses:
+    NotModified:
+      description: Not Modified
+      headers:
+        Last-Modified:
+          explode: false
+          schema:
+            description: Date and time that this response last changed
+            example: Mon, 19 Feb 2019 10:15:08 GMT
+            format: rfc2616 httpdate
+            type: string
+          style: simple
+    BadRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_400'
+      description: Bad Request
+    Unauthorized:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_401'
+      description: Unauthorized
+    Forbidden:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_403'
+      description: Forbidden
+    NotFound:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_404'
+      description: Not Found
+    Conflict:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_409'
+      description: Conflict
+  schemas:
+    Pagination:
+      properties:
+        limit:
+          description: Maximum number of results per page
+          example: 20
+          type: integer
+        offset:
+          description: Current page's offset from the beginning of the result set
+          example: 0
+          type: integer
+        first:
+          description: Relative URL for the first page of the result set
+          example: /v3/<resource>?offset=0&limit=20
+          format: URL path and query string
+          type: string
+        previous:
+          description: Relative URL for the previous page of the result set, or `null`
+            if this is the first page
+          format: URL path and query string
+          nullable: true
+          type: string
+        current:
+          description: Relative URL for the current page of the result set
+          example: /v3/<resource>?offset=0&limit=20
+          format: URL path and query string
+          type: string
+        next:
+          description: Relative URL for the next page of the result set, or `null`
+            if this is the last page
+          example: /v3/<resource>?offset=20&limit=20
+          format: URL path and query string
+          nullable: true
+          type: string
+        total:
+          description: Total number of all results
+          example: 100
+          type: integer
+      type: object
+    User:
+      example:
+        updated_at: 2018-09-18 11:46:25 -0700
+        release_count: 1619
+        module_count: 178
+        created_at: 2010-05-19 05:46:26 -0700
+        display_name: Puppet
+        uri: /v3/users/puppetlabs
+        gravatar_id: fdd009b7c1ec96e088b389f773e87aec
+        slug: puppetlabs
+        username: puppetlabs
+      properties:
+        uri:
+          description: Relative URL for this User resource
+          example: /v3/users/puppetlabs
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this User resource
+          example: puppetlabs
+          pattern: ^[a-zA-Z0-9]+$
+          type: string
+        gravatar_id:
+          description: Gravatar ID, learn more at [https://gravatar.com/]()
+          example: fdd009b7c1ec96e088b389f773e87aec
+          type: string
+        username:
+          description: Username for this User resource
+          example: puppetlabs
+          type: string
+        display_name:
+          description: Free form display name for this User resource
+          example: Puppet
+          type: string
+        release_count:
+          description: Total number of module releases (versions) published under
+            this User
+          example: 1619
+          type: integer
+        module_count:
+          description: Total number of unique modules published under this User
+          example: 178
+          type: integer
+        created_at:
+          description: Date and time this User resource was created
+          example: 2010-05-19 05:46:26 -0700
+          format: iso8601
+          type: string
+        updated_at:
+          description: Date and time this User resource was last modified
+          example: 2018-09-18 11:46:25 -0700
+          format: iso8601
+          type: string
+      type: object
+    UserAbbreviated:
+      properties:
+        uri:
+          description: Relative URL for this User resource
+          example: /v3/users/puppetlabs
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this User resource
+          example: puppetlabs
+          pattern: ^[a-zA-Z0-9]+$
+          type: string
+        username:
+          description: Username for this User resource
+          example: puppetlabs
+          type: string
+        gravatar_id:
+          description: Gravatar ID, learn more at [https://gravatar.com/]()
+          example: fdd009b7c1ec96e088b389f773e87aec
+          type: string
+      type: object
+    Module:
+      example:
+        owner: ""
+        endorsement: supported
+        homepage_url: https://github.com/puppetlabs/puppetlabs-apache
+        created_at: 2010-05-19 05:46:26 -0700
+        current_release: ""
+        uri: /v3/modules/puppetlabs-apache
+        superseded_by: ""
+        feedback_score: 84
+        releases:
+        - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          created_at: 2019-01-10 05:18:00 -0800
+          uri: /v3/releases/puppetlabs-apache-4.0.0
+          version: 4.0.0
+          deleted_at: deleted_at
+          slug: puppetlabs-apache-4.0.0
+          file_size: 317119
+          supported: true
+        - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          created_at: 2019-01-10 05:18:00 -0800
+          uri: /v3/releases/puppetlabs-apache-4.0.0
+          version: 4.0.0
+          deleted_at: deleted_at
+          slug: puppetlabs-apache-4.0.0
+          file_size: 317119
+          supported: true
+        issues_url: https://tickets.puppetlabs.com/browse/MODULES
+        updated_at: 2010-05-19 05:46:26 -0700
+        downloads: 6618694
+        deprecated_at: deprecated_at
+        name: apache
+        module_group: base
+        deprecated_for: deprecated_for
+        slug: puppetlabs-apache
+        supported: true
+      properties:
+        uri:
+          description: Relative URL for this Module resource
+          example: /v3/modules/puppetlabs-apache
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Module resource
+          example: puppetlabs-apache
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*$
+          type: string
+        name:
+          description: Base name of this module (without username/namespace)
+          example: apache
+          pattern: ^[a-z][a-z0-9_]*$
+          type: string
+        downloads:
+          description: Total download count for all released versions of this module
+          example: 6618694
+          type: integer
+        created_at:
+          description: Date and time this Module resource was created
+          example: 2010-05-19 05:46:26 -0700
+          format: iso8601
+          type: string
+        updated_at:
+          description: Date and time this Module resource was last modified
+          example: 2010-05-19 05:46:26 -0700
+          format: iso8601
+          type: string
+        deprecated_at:
+          description: Date and time this Module resource was marked as deprecated
+            by the owner
+          format: iso8601
+          nullable: true
+          type: string
+        deprecated_for:
+          description: Reason provided by the owner for marking this module as deprecated
+          nullable: true
+          type: string
+        superseded_by:
+          allOf:
+          - $ref: '#/components/schemas/ModuleMinimal'
+          - description: Module resource suggested by the owner as a potential replacement
+              for a deprecated module
+            nullable: true
+        supported:
+          deprecated: true
+          description: Whether or not this module is a [Supported module](https://forge.puppet.com/supported),
+            see `endorsement` field instead
+          example: true
+          type: boolean
+        endorsement:
+          description: Indicates whether a module is endorsed through the Supported,
+            Approved or Partner Supported programs, or `null` if not endorsed
+          enum:
+          - supported
+          - approved
+          - partner
+          example: supported
+          nullable: true
+          type: string
+        module_group:
+          description: Indicates whether or not a module is licensed for use by Puppet
+            Enterprise customers only, indicated by a value of `pe_only`, for all
+            other modules this value will be `base`
+          enum:
+          - base
+          - pe_only
+          example: base
+          type: string
+        owner:
+          allOf:
+          - $ref: '#/components/schemas/UserAbbreviated'
+          - description: Abbreviated representation of the User resource that owns/publishes
+              this module
+        current_release:
+          allOf:
+          - $ref: '#/components/schemas/Release'
+          - description: Full representation of the Release resource for the most
+              "recent" version of this module
+        releases:
+          description: Array of abbreviated representations of all published Releases
+            of this module
+          items:
+            $ref: '#/components/schemas/ReleaseAbbreviated'
+          type: array
+        feedback_score:
+          description: Numeric score representing the average rating this module has
+            received from Forge users
+          example: 84
+          maximum: 100
+          minimum: 0
+          type: integer
+        homepage_url:
+          description: Author-provided URL for this module's homepage
+          example: https://github.com/puppetlabs/puppetlabs-apache
+          format: uri
+          type: string
+        issues_url:
+          description: Author-provided URL for reporting issues about this module
+          example: https://tickets.puppetlabs.com/browse/MODULES
+          format: uri
+          type: string
+      type: object
+    ModuleAbbreviated:
+      properties:
+        uri:
+          description: Relative URL for this Module resource
+          example: /v3/modules/puppetlabs-apache
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Module resource
+          example: puppetlabs-apache
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*$
+          type: string
+        name:
+          description: Base name of this module (without username/namespace)
+          example: apache
+          pattern: ^[a-z][a-z0-9_]*$
+          type: string
+        deprecated_at:
+          description: Date and time this Module resource was marked as deprecated
+            by the owner
+          format: iso8601
+          nullable: true
+          type: string
+        owner:
+          allOf:
+          - $ref: '#/components/schemas/UserAbbreviated'
+          - description: Abbreviated representation of the User resource that owns/publishes
+              this module
+      type: object
+    ModuleMinimal:
+      properties:
+        uri:
+          description: Relative URL for this Module resource
+          example: /v3/modules/puppetlabs-apache
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Module resource
+          example: puppetlabs-apache
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*$
+          type: string
+      type: object
+    Release:
+      example:
+        metadata: '{}'
+        file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+        created_at: 2019-01-10 05:18:00 -0800
+        file_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        validation_score: 100
+        reference: reference
+        docs: '{}'
+        updated_at: 2019-01-10 05:20:17 -0800
+        downloads: 12782
+        file_md5: e579a02bd16f9dec56018d407be7ab32
+        slug: puppetlabs-apache-4.0.0
+        tasks:
+        - metadata: '{}'
+          executables:
+          - init.sh
+          - init.ps1
+          name: init
+          description: Allows you to perform apache service functions
+          executable: init.sh
+        - metadata: '{}'
+          executables:
+          - init.sh
+          - init.ps1
+          name: init
+          description: Allows you to perform apache service functions
+          executable: init.sh
+        module: ""
+        changelog: changelog
+        readme: readme
+        uri: /v3/releases/puppetlabs-apache-4.0.0
+        version: 4.0.0
+        deleted_at: deleted_at
+        file_size: 317119
+        tags:
+        - tags
+        - tags
+        license: license
+        pdk: true
+        plans:
+        - name: lvm::expand
+          uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+        - name: lvm::expand
+          uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+        deleted_for: deleted_for
+        supported: true
+      properties:
+        uri:
+          description: Relative URL for this Release resource
+          example: /v3/releases/puppetlabs-apache-4.0.0
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Release resource
+          example: puppetlabs-apache-4.0.0
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        module:
+          allOf:
+          - $ref: '#/components/schemas/ModuleAbbreviated'
+          - description: Abbreviated representation of the Module resource that this
+              release is a version of
+        version:
+          example: 4.0.0
+          format: semantic version
+          type: string
+        metadata:
+          description: Verbatim contents of release's `metadata.json` file
+          type: object
+        tags:
+          description: List of tags applied to this module release (derived from `metadata.json`)
+          items:
+            type: string
+          type: array
+        supported:
+          deprecated: true
+          description: |
+            Indicates whether or not this specific module release is supported, this value is no longer relevant,
+            please see the `endorsement` property of the parent module instead
+          example: true
+          type: boolean
+        pdk:
+          description: |
+            Indicates whether or not this module release's metadata contains
+            [Puppet Development Kit](https://puppet.com/docs/pdk/latest/pdk.html) related keys/values
+          example: true
+          type: boolean
+        validation_score:
+          description: |
+            Numeric value representing module release's "Quality score", see
+            [module scoring](https://forge.puppet.com/about/scoring) to learn more
+          example: 100
+          maximum: 100
+          minimum: 0
+          type: integer
+        file_uri:
+          description: Relative or absolute URL to download this release's tarball
+          example: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          format: uri
+          type: string
+        file_size:
+          description: Size of this release's tarball in bytes
+          example: 317119
+          format: bytes
+          type: integer
+        file_md5:
+          description: MD5 checksum for this release's tarball, can be used to verify
+            successful download
+          example: e579a02bd16f9dec56018d407be7ab32
+          format: md5
+          type: string
+        file_sha256:
+          description: SHA-256 checksum for this release's tarball, can be used to
+            verify successful download
+          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          format: sha256
+          type: string
+        downloads:
+          description: Number of times this release has been downloaded through the
+            Forge
+          example: 12782
+          type: integer
+        readme:
+          description: Contents of this release's README file, optionally converted
+            to HTML format if possible (see `with_html` param)
+          type: string
+        changelog:
+          description: Contents of this release's CHANGELOG file, optionally converted
+            to HTML format if possible (see `with_html` param)
+          type: string
+        license:
+          description: Contents of this release's LICENSE file, optionally converted
+            to HTML format if possible (see `with_html` param)
+          type: string
+        reference:
+          description: Contents of this release's REFERENCE file, optionally converted
+            to HTML format if possible (see `with_html` param)
+          type: string
+        docs:
+          deprecated: true
+          description: |
+            (OPTIONAL) Automatically generated documentation for custom Types included in this module release, see `reference`
+            key instead (This field is not included in response by default, see `include_fields` param for more info)
+          type: object
+        tasks:
+          description: Metadata for any Bolt tasks included in this module release
+          items:
+            $ref: '#/components/schemas/ReleaseTask'
+          type: array
+        plans:
+          description: Links to metadata for Bolt plans included in this module release
+          items:
+            $ref: '#/components/schemas/ReleasePlanAbbreviated'
+          type: array
+        created_at:
+          description: Date and time this Release resource was created
+          example: 2019-01-10 05:18:00 -0800
+          format: iso8601
+          type: string
+        updated_at:
+          description: Date and time this Release resource was last updated
+          example: 2019-01-10 05:20:17 -0800
+          format: iso8601
+          type: string
+        deleted_at:
+          description: Date and time this Release resource was marked as deleted
+          format: iso8601
+          nullable: true
+          type: string
+        deleted_for:
+          description: Author-provided reason that this module release was marked
+            as deleted
+          nullable: true
+          type: string
+      type: object
+    ReleaseAbbreviated:
+      example:
+        file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+        created_at: 2019-01-10 05:18:00 -0800
+        uri: /v3/releases/puppetlabs-apache-4.0.0
+        version: 4.0.0
+        deleted_at: deleted_at
+        slug: puppetlabs-apache-4.0.0
+        file_size: 317119
+        supported: true
+      properties:
+        uri:
+          description: Relative URL for this Release resource
+          example: /v3/releases/puppetlabs-apache-4.0.0
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Release resource
+          example: puppetlabs-apache-4.0.0
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        version:
+          example: 4.0.0
+          format: semantic version
+          type: string
+        supported:
+          deprecated: true
+          description: |
+            Indicates whether or not this specific module release is supported, this value is no longer relevant,
+            please see the `endorsement` property of the parent module instead
+          example: true
+          type: boolean
+        created_at:
+          description: Date and time this Release resource was created
+          example: 2019-01-10 05:18:00 -0800
+          format: iso8601
+          type: string
+        deleted_at:
+          description: Date and time this Release resource was marked as deleted
+          format: iso8601
+          nullable: true
+          type: string
+        file_uri:
+          description: Relative or absolute URL to download this release's tarball
+          example: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          format: uri
+          type: string
+        file_size:
+          description: Size of this release's tarball in bytes
+          example: 317119
+          format: bytes
+          type: integer
+      type: object
+    ReleaseMinimal:
+      example:
+        file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+        uri: /v3/releases/puppetlabs-apache-4.0.0
+        slug: puppetlabs-apache-4.0.0
+      properties:
+        uri:
+          description: Relative URL for this Release resource
+          example: /v3/releases/puppetlabs-apache-4.0.0
+          format: URL path and query string
+          type: string
+        slug:
+          description: Unique textual identifier for this Release resource
+          example: puppetlabs-apache-4.0.0
+          pattern: ^[a-zA-Z0-9]+[-\/][a-z][a-z0-9_]*[-\/][0-9]+\.[0-9]+\.[0-9]+(?:[\-+].+)?$
+          type: string
+        file_uri:
+          description: Relative or absolute URL to download this release's tarball
+          example: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          format: uri
+          type: string
+      type: object
+    ReleaseTask:
+      example:
+        metadata: '{}'
+        executables:
+        - init.sh
+        - init.ps1
+        name: init
+        description: Allows you to perform apache service functions
+        executable: init.sh
+      properties:
+        name:
+          description: Name for this task
+          example: init
+          type: string
+        executable:
+          deprecated: true
+          description: Executable for this task (deprecated, superseded by "executables")
+          example: init.sh
+          type: string
+        executables:
+          description: Array of executable name(s) for all implementations of this
+            task
+          example:
+          - init.sh
+          - init.ps1
+          items:
+            type: string
+          type: array
+        description:
+          description: Description for this task
+          example: Allows you to perform apache service functions
+          type: string
+        metadata:
+          description: |
+            JSON metadata for this task, see [writing tasks](https://puppet.com/docs/bolt/latest/writing_tasks.html)
+            documentation for more info
+          type: object
+      type: object
+    ReleasePlanAbbreviated:
+      example:
+        name: lvm::expand
+        uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+      properties:
+        uri:
+          description: URL path to the full metadata for this plan
+          example: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          format: URL path
+          type: string
+        name:
+          description: The name of the plan, including the module name
+          example: lvm::expand
+          type: string
+      type: object
+    ReleasePlan:
+      example:
+        filename: plans/expand.pp
+        name: lvm::expand
+        plan_metadata:
+          file: plans/expand.pp
+          defaults:
+            resize_fs: "true"
+          docstring:
+            text: This plan expands storage on servers using LVM...
+            tags:
+            - types:
+              - Boolean
+              - Boolean
+              tag_name: param
+              name: resize_fs
+              text: Whether to resize the filesystem
+            - types:
+              - Boolean
+              - Boolean
+              tag_name: param
+              name: resize_fs
+              text: Whether to resize the filesystem
+          line: 15
+          name: lvm::expand
+          source: |-
+            plan lvm::expand (
+              String...
+        uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+      properties:
+        uri:
+          description: Relative URL for this Plan resource
+          example: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          format: URL path and query string
+          type: string
+        name:
+          description: The name of the plan, including the module name
+          example: lvm::expand
+          type: string
+        filename:
+          description: Path to this Plan within the module's file structure
+          example: plans/expand.pp
+          type: string
+        plan_metadata:
+          $ref: '#/components/schemas/ReleasePlan_plan_metadata'
+      type: object
+    DeprecationRequest:
+      example:
+        action: deprecate
+        params:
+          reason: No longer maintained
+          replacement_slug: puppet-nginx
+      properties:
+        action:
+          description: Action to take on resource. 'deprecate' is currently the only
+            valid option.
+          enum:
+          - deprecate
+          example: deprecate
+          type: string
+        params:
+          $ref: '#/components/schemas/DeprecationRequest_params'
+      type: object
+    inline_response_200:
+      example:
+        pagination: ""
+        results:
+        - updated_at: 2018-09-18 11:46:25 -0700
+          release_count: 1619
+          module_count: 178
+          created_at: 2010-05-19 05:46:26 -0700
+          display_name: Puppet
+          uri: /v3/users/puppetlabs
+          gravatar_id: fdd009b7c1ec96e088b389f773e87aec
+          slug: puppetlabs
+          username: puppetlabs
+        - updated_at: 2018-09-18 11:46:25 -0700
+          release_count: 1619
+          module_count: 178
+          created_at: 2010-05-19 05:46:26 -0700
+          display_name: Puppet
+          uri: /v3/users/puppetlabs
+          gravatar_id: fdd009b7c1ec96e088b389f773e87aec
+          slug: puppetlabs
+          username: puppetlabs
+      properties:
+        pagination:
+          allOf:
+          - $ref: '#/components/schemas/Pagination'
+          - properties:
+              first:
+                example: /v3/users?offset=0&limit=20
+              current:
+                example: /v3/users?offset=0&limit=20
+              next:
+                example: /v3/users?offset=20&limit=20
+        results:
+          items:
+            $ref: '#/components/schemas/User'
+          type: array
+    inline_response_400:
+      properties:
+        message:
+          example: 400 Bad Request
+          type: string
+        errors:
+          example:
+          - '''puppetlabs-apache4.5.0'' is not a valid release slug'
+          items:
+            type: string
+          type: array
+    inline_response_404:
+      properties:
+        message:
+          example: 404 Not Found
+          type: string
+        errors:
+          example:
+          - The requested resource could not be found
+          items:
+            type: string
+          type: array
+    inline_response_401:
+      properties:
+        message:
+          example: 401 Unauthorized
+          type: string
+        errors:
+          example:
+          - This endpoint requires a valid Authorization header
+          items:
+            type: string
+          type: array
+    inline_response_403:
+      properties:
+        message:
+          example: 403 Forbidden
+          type: string
+        errors:
+          example:
+          - The provided API key is invalid or has insufficient permissions for the
+            requested operation
+          items:
+            type: string
+          type: array
+    inline_response_200_1:
+      example:
+        pagination: ""
+        results:
+        - metadata: '{}'
+          file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          created_at: 2019-01-10 05:18:00 -0800
+          file_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          validation_score: 100
+          reference: reference
+          docs: '{}'
+          updated_at: 2019-01-10 05:20:17 -0800
+          downloads: 12782
+          file_md5: e579a02bd16f9dec56018d407be7ab32
+          slug: puppetlabs-apache-4.0.0
+          tasks:
+          - metadata: '{}'
+            executables:
+            - init.sh
+            - init.ps1
+            name: init
+            description: Allows you to perform apache service functions
+            executable: init.sh
+          - metadata: '{}'
+            executables:
+            - init.sh
+            - init.ps1
+            name: init
+            description: Allows you to perform apache service functions
+            executable: init.sh
+          module: ""
+          changelog: changelog
+          readme: readme
+          uri: /v3/releases/puppetlabs-apache-4.0.0
+          version: 4.0.0
+          deleted_at: deleted_at
+          file_size: 317119
+          tags:
+          - tags
+          - tags
+          license: license
+          pdk: true
+          plans:
+          - name: lvm::expand
+            uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          - name: lvm::expand
+            uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          deleted_for: deleted_for
+          supported: true
+        - metadata: '{}'
+          file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+          created_at: 2019-01-10 05:18:00 -0800
+          file_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          validation_score: 100
+          reference: reference
+          docs: '{}'
+          updated_at: 2019-01-10 05:20:17 -0800
+          downloads: 12782
+          file_md5: e579a02bd16f9dec56018d407be7ab32
+          slug: puppetlabs-apache-4.0.0
+          tasks:
+          - metadata: '{}'
+            executables:
+            - init.sh
+            - init.ps1
+            name: init
+            description: Allows you to perform apache service functions
+            executable: init.sh
+          - metadata: '{}'
+            executables:
+            - init.sh
+            - init.ps1
+            name: init
+            description: Allows you to perform apache service functions
+            executable: init.sh
+          module: ""
+          changelog: changelog
+          readme: readme
+          uri: /v3/releases/puppetlabs-apache-4.0.0
+          version: 4.0.0
+          deleted_at: deleted_at
+          file_size: 317119
+          tags:
+          - tags
+          - tags
+          license: license
+          pdk: true
+          plans:
+          - name: lvm::expand
+            uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          - name: lvm::expand
+            uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+          deleted_for: deleted_for
+          supported: true
+      properties:
+        pagination:
+          allOf:
+          - $ref: '#/components/schemas/Pagination'
+          - properties:
+              first:
+                example: /v3/releases?offset=0&limit=20
+              current:
+                example: /v3/releases?offset=0&limit=20
+              next:
+                example: /v3/releases?offset=20&limit=20
+        results:
+          items:
+            $ref: '#/components/schemas/Release'
+          type: array
+    inline_object:
+      properties:
+        file:
+          example: H4sIABYkiFwAA+09CT...
+          format: base64
+          type: string
+      type: object
+    inline_response_409:
+      properties:
+        message:
+          example: 409 Conflict
+          type: string
+        errors:
+          example:
+          - A release with the version specified in the metadata.json already exists
+            for this module.
+          items:
+            type: string
+          type: array
+    inline_response_200_2:
+      example:
+        pagination: ""
+        results:
+        - filename: plans/expand.pp
+          name: lvm::expand
+          plan_metadata:
+            file: plans/expand.pp
+            defaults:
+              resize_fs: "true"
+            docstring:
+              text: This plan expands storage on servers using LVM...
+              tags:
+              - types:
+                - Boolean
+                - Boolean
+                tag_name: param
+                name: resize_fs
+                text: Whether to resize the filesystem
+              - types:
+                - Boolean
+                - Boolean
+                tag_name: param
+                name: resize_fs
+                text: Whether to resize the filesystem
+            line: 15
+            name: lvm::expand
+            source: |-
+              plan lvm::expand (
+                String...
+          uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+        - filename: plans/expand.pp
+          name: lvm::expand
+          plan_metadata:
+            file: plans/expand.pp
+            defaults:
+              resize_fs: "true"
+            docstring:
+              text: This plan expands storage on servers using LVM...
+              tags:
+              - types:
+                - Boolean
+                - Boolean
+                tag_name: param
+                name: resize_fs
+                text: Whether to resize the filesystem
+              - types:
+                - Boolean
+                - Boolean
+                tag_name: param
+                name: resize_fs
+                text: Whether to resize the filesystem
+            line: 15
+            name: lvm::expand
+            source: |-
+              plan lvm::expand (
+                String...
+          uri: /v3/releases/puppetlabs-lvm-1.4.0/plans/lvm::expand
+      properties:
+        pagination:
+          allOf:
+          - $ref: '#/components/schemas/Pagination'
+          - properties:
+              first:
+                example: /v3/releases/{release_slug}/plans?offset=0&limit=20
+              current:
+                example: /v3/releases/{release_slug}/plans?offset=0&limit=20
+              next:
+                example: /v3/releases/{release_slug}/plans?offset=20&limit=20
+        results:
+          items:
+            $ref: '#/components/schemas/ReleasePlan'
+          type: array
+    inline_response_200_3:
+      example:
+        pagination: ""
+        results:
+        - owner: ""
+          endorsement: supported
+          homepage_url: https://github.com/puppetlabs/puppetlabs-apache
+          created_at: 2010-05-19 05:46:26 -0700
+          current_release: ""
+          uri: /v3/modules/puppetlabs-apache
+          superseded_by: ""
+          feedback_score: 84
+          releases:
+          - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+            created_at: 2019-01-10 05:18:00 -0800
+            uri: /v3/releases/puppetlabs-apache-4.0.0
+            version: 4.0.0
+            deleted_at: deleted_at
+            slug: puppetlabs-apache-4.0.0
+            file_size: 317119
+            supported: true
+          - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+            created_at: 2019-01-10 05:18:00 -0800
+            uri: /v3/releases/puppetlabs-apache-4.0.0
+            version: 4.0.0
+            deleted_at: deleted_at
+            slug: puppetlabs-apache-4.0.0
+            file_size: 317119
+            supported: true
+          issues_url: https://tickets.puppetlabs.com/browse/MODULES
+          updated_at: 2010-05-19 05:46:26 -0700
+          downloads: 6618694
+          deprecated_at: deprecated_at
+          name: apache
+          module_group: base
+          deprecated_for: deprecated_for
+          slug: puppetlabs-apache
+          supported: true
+        - owner: ""
+          endorsement: supported
+          homepage_url: https://github.com/puppetlabs/puppetlabs-apache
+          created_at: 2010-05-19 05:46:26 -0700
+          current_release: ""
+          uri: /v3/modules/puppetlabs-apache
+          superseded_by: ""
+          feedback_score: 84
+          releases:
+          - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+            created_at: 2019-01-10 05:18:00 -0800
+            uri: /v3/releases/puppetlabs-apache-4.0.0
+            version: 4.0.0
+            deleted_at: deleted_at
+            slug: puppetlabs-apache-4.0.0
+            file_size: 317119
+            supported: true
+          - file_uri: /v3/files/puppetlabs-apache-4.0.0.tar.gz
+            created_at: 2019-01-10 05:18:00 -0800
+            uri: /v3/releases/puppetlabs-apache-4.0.0
+            version: 4.0.0
+            deleted_at: deleted_at
+            slug: puppetlabs-apache-4.0.0
+            file_size: 317119
+            supported: true
+          issues_url: https://tickets.puppetlabs.com/browse/MODULES
+          updated_at: 2010-05-19 05:46:26 -0700
+          downloads: 6618694
+          deprecated_at: deprecated_at
+          name: apache
+          module_group: base
+          deprecated_for: deprecated_for
+          slug: puppetlabs-apache
+          supported: true
+      properties:
+        pagination:
+          allOf:
+          - $ref: '#/components/schemas/Pagination'
+          - properties:
+              first:
+                example: /v3/modules?offset=0&limit=20
+              current:
+                example: /v3/modules?offset=0&limit=20
+              next:
+                example: /v3/modules?offset=20&limit=20
+        results:
+          items:
+            $ref: '#/components/schemas/Module'
+          type: array
+    ReleasePlan_plan_metadata_docstring_tags:
+      description: Generated docstring for a specific YARD tag (like @param, for example)
+      example:
+        types:
+        - Boolean
+        - Boolean
+        tag_name: param
+        name: resize_fs
+        text: Whether to resize the filesystem
+      properties:
+        name:
+          description: The name specified by this YARD tag
+          example: resize_fs
+          type: string
+        text:
+          description: The description text specified by this YARD tag
+          example: Whether to resize the filesystem
+          type: string
+        types:
+          description: Valid types specified by this YARD tag
+          items:
+            example: Boolean
+            type: string
+          type: array
+        tag_name:
+          description: The name of the YARD tag itself
+          example: param
+          type: string
+    ReleasePlan_plan_metadata_docstring:
+      description: Raw doc objects for this plan generated by puppet-strings (YARD)
+        docstring comments in the plan source
+      example:
+        text: This plan expands storage on servers using LVM...
+        tags:
+        - types:
+          - Boolean
+          - Boolean
+          tag_name: param
+          name: resize_fs
+          text: Whether to resize the filesystem
+        - types:
+          - Boolean
+          - Boolean
+          tag_name: param
+          name: resize_fs
+          text: Whether to resize the filesystem
+      properties:
+        tags:
+          description: Generated docstrings for any YARD tags (like @param, for example)
+          items:
+            $ref: '#/components/schemas/ReleasePlan_plan_metadata_docstring_tags'
+          type: array
+        text:
+          description: Contains any free-form YARD comment text outside of tags
+          example: This plan expands storage on servers using LVM...
+          type: string
+    ReleasePlan_plan_metadata:
+      example:
+        file: plans/expand.pp
+        defaults:
+          resize_fs: "true"
+        docstring:
+          text: This plan expands storage on servers using LVM...
+          tags:
+          - types:
+            - Boolean
+            - Boolean
+            tag_name: param
+            name: resize_fs
+            text: Whether to resize the filesystem
+          - types:
+            - Boolean
+            - Boolean
+            tag_name: param
+            name: resize_fs
+            text: Whether to resize the filesystem
+        line: 15
+        name: lvm::expand
+        source: |-
+          plan lvm::expand (
+            String...
+      properties:
+        name:
+          description: the name of the plan, including the module name
+          example: lvm::expand
+          type: string
+        file:
+          description: Path to this plan within the module's file structure
+          example: plans/expand.pp
+          type: string
+        line:
+          description: The line within the plan source file where the plan code starts
+          example: 15
+          minimum: 1
+          type: integer
+        source:
+          description: Full text of the plan source file
+          example: |-
+            plan lvm::expand (
+              String...
+          type: string
+        defaults:
+          description: 'Default values for the plan''s arguments: keys are argument
+            names, and values are their defaults'
+          example:
+            resize_fs: "true"
+          type: object
+        docstring:
+          $ref: '#/components/schemas/ReleasePlan_plan_metadata_docstring'
+    DeprecationRequest_params:
+      example:
+        reason: No longer maintained
+        replacement_slug: puppet-nginx
+      nullable: true
+      properties:
+        reason:
+          description: Reason for deprecation
+          example: No longer maintained
+          nullable: true
+          type: string
+        replacement_slug:
+          description: Slug identifying a replacement Module. Accepts legacy (case-sensitive)
+            module naming.
+          example: puppet-nginx
+          nullable: true
+          pattern: ^[a-zA-Z0-9]+[-\/][a-zA-Z][a-zA-Z0-9_]*$
+          type: string
+  securitySchemes:
+    ApiKeyAuth:
+      description: |
+        Some of the Forge API endpoints require authentication in the form of a user API key. API keys may be created and revoked from a user's profile on the [Forge website](https://forge.puppet.com), where other profile details are managed.
+
+        To perform actions that require API key authentication, the key must be present in an `Authorization` header with the request. The header should be formatted as:
+
+        ```
+        Authorization: Bearer <api_key>
+        ```
+
+        If a request is made to a protected endpoint without the required `Authorization` header a `401 Unauthorized` response will be returned. If an `Authorization` header is sent with the request, but the provided key is invalid or has insufficent permissions a `403 Forbidden` response will be returned.
+      in: header
+      name: 'Authorization: Bearer <api_key>'
+      type: apiKey
